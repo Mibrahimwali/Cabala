@@ -169,8 +169,37 @@ export function useLending() {
     [program, wallet.publicKey]
   );
 
+  const withdrawLiquidity = useCallback(
+    async (amountShares: number) => {
+      if (!program || !wallet.publicKey) throw new Error("Wallet not connected");
+      setLoading(true);
+      try {
+        const shares = new BN(amountShares * 1_000_000_000);
+        const [globalPool] = PublicKey.findProgramAddressSync(
+          [Buffer.from("pool")],
+          program.programId
+        );
+
+        const tx = await program.methods
+          .withdrawLiquidity(shares)
+          .accountsStrict({
+            globalPool,
+            lender: wallet.publicKey,
+            systemProgram: SystemProgram.programId,
+          })
+          .rpc();
+
+        return tx;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [program, wallet.publicKey]
+  );
+
   return {
     depositLiquidity,
+    withdrawLiquidity,
     borrow,
     repay,
     loading,

@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_lang::system_program::{transfer, Transfer};
-use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer as SplTransfer};
+use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer as SplTransfer, CloseAccount};
 use mpl_token_metadata::accounts::Metadata;
 use std::str::FromStr;
 
@@ -9,7 +9,8 @@ declare_id!("EazAH8Adyino7uConjZfYdjFqmjqfm7vBtTsba3Ejg39");
 pub const LTV_AMOUNT: u64 = 1_200_000_000; // 1.2 SOL
 pub const LOAN_DURATION: i64 = 7 * 24 * 60 * 60; // 7 days in seconds
 pub const KEEPER_BOUNTY: u64 = 20_000_000; // 0.02 SOL
-// TODO: Replace with the actual Metaplex Collection Mint Pubkey for Jito Cabal
+
+// Real Jito Cabal Verified Collection Mint (Placeholder - update prior to prod deployment)
 pub const CABAL_COLLECTION: &str = "5YVNYsdh7RPEunc5VaiX4ky33W6TjTq9Vwt34Bhpfjtw"; 
 
 #[program]
@@ -52,6 +53,31 @@ pub mod jito_cabal_lending {
         pool.total_shares = pool.total_shares.checked_add(shares).ok_or(ErrorCode::MathOverflow)?;
 
         msg!("Deposited {} SOL. Issued {} Shares.", amount, shares);
+        Ok(())
+    }
+
+    pub fn withdraw_liquidity(ctx: Context<WithdrawLiquidity>, shares: u64) -> Result<()> {
+        let pool = &mut ctx.accounts.global_pool;
+        require!(pool.total_shares >= shares, ErrorCode::InsufficientShares);
+        
+        let amount = (shares as u128)
+            .checked_mul(pool.total_sol as u128)
+            .ok_or(ErrorCode::MathOverflow)?
+            .checked_div(pool.total_shares as u128)
+            .ok_or(ErrorCode::MathOverflow)? as u64;
+
+        let rent_minimum = Rent::get()?.minimum_balance(pool.to_account_info().data_len());
+        let current_lamports = pool.to_account_info().lamports();
+        require!(current_lamports.checked_sub(amount).ok_or(ErrorCode::MathOverflow)? >= rent_minimum, ErrorCode::RentExemptionRisk);
+
+        pool.total_sol = pool.total_sol.checked_sub(amount).ok_or(ErrorCode::MathOverflow)?;
+        pool.total_shares = pool.total_shares.checked_sub(shares).ok_or(ErrorCode::MathOverflow)?;
+
+        // Transfer SOL from Pool PDA to Lender
+        **pool.to_account_info().try_borrow_mut_lamports()? -= amount;
+        **ctx.accounts.lender.try_borrow_mut_lamports()? += amount;
+
+        msg!("Withdrew {} SOL. Burned {} Shares.", amount, shares);
         Ok(())
     }
 
@@ -161,7 +187,7 @@ pub mod jito_cabal_lending {
         ))?;
 
         receipt.status = LoanStatus::Repaid;
-        msg!("Repaid {} SOL. NFT Returned. APY dynamically calculated.", total_repayment);
+        msg!("Repaid {} SOL. NFT Returned. APY dynamically calculated. Receipt closed.", total_repayment);
         Ok(())
     }
 
@@ -214,6 +240,7 @@ pub mod jito_cabal_lending {
         let seeds = &[b"pool".as_ref(), bump_bytes.as_ref()];
         let signer = &[&seeds[..]];
 
+        // Transfer NFT to Admin Destination
         let cpi_accounts = SplTransfer {
             from: ctx.accounts.admin_vault_account.to_account_info(),
             to: ctx.accounts.admin_dest_account.to_account_info(),
@@ -224,7 +251,18 @@ pub mod jito_cabal_lending {
             1,
         )?;
 
-        msg!("Admin withdrew seized NFT.");
+        // Close the Admin Vault ATA to prevent state bloat and refund rent
+        token::close_account(CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            token::CloseAccount {
+                account: ctx.accounts.admin_vault_account.to_account_info(),
+                destination: ctx.accounts.admin.to_account_info(),
+                authority: pool.to_account_info(),
+            },
+            signer,
+        ))?;
+
+        msg!("Admin withdrew seized NFT and closed vault ATA.");
         Ok(())
     }
 
@@ -251,7 +289,7 @@ pub mod jito_cabal_lending {
         pool.total_sol = pool.total_sol.checked_add(repo_value.checked_sub(KEEPER_BOUNTY).ok_or(ErrorCode::MathOverflow)?).ok_or(ErrorCode::MathOverflow)?;
         receipt.status = LoanStatus::Resolved;
 
-        msg!("Repo Resolved. 2 SOL recovered.");
+        msg!("Repo Resolved. 2 SOL recovered. Receipt closed.");
         Ok(())
     }
 }
@@ -310,6 +348,15 @@ pub struct DepositLiquidity<'info> {
 }
 
 #[derive(Accounts)]
+pub struct WithdrawLiquidity<'info> {
+    #[account(mut, seeds = [b"pool"], bump = global_pool.bump)]
+    pub global_pool: Account<'info, GlobalPool>,
+    #[account(mut)]
+    pub lender: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
 pub struct Borrow<'info> {
     #[account(mut, seeds = [b"pool"], bump = global_pool.bump)]
     pub global_pool: Account<'info, GlobalPool>,
@@ -333,8 +380,9 @@ pub struct Borrow<'info> {
 pub struct Repay<'info> {
     #[account(mut, seeds = [b"pool"], bump = global_pool.bump)]
     pub global_pool: Account<'info, GlobalPool>,
-    #[account(mut, constraint = loan_receipt.borrower == borrower.key())]
-    pub loan_receipt: Account<'info, LoanReceipt>,
+    // Closes the loan receipt to prevent state bloat and refund rent
+    #[account(mut, close = borrower, constraint = loan_receipt.borrower == borrower.key())]
+    pub loan_receipt: Box<Account<'info, LoanReceipt>>,
     #[account(mut)]
     pub borrower: Signer<'info>,
     #[account(mut)]
@@ -355,7 +403,8 @@ pub struct SeizeCollateral<'info> {
     pub keeper: Signer<'info>,
     #[account(mut)]
     pub escrow_nft_account: Account<'info, TokenAccount>,
-    #[account(mut)]
+    // Strict constraints: Mint matches the seized NFT, authority is the Pool PDA
+    #[account(mut, constraint = admin_vault_account.mint == loan_receipt.nft_mint && admin_vault_account.owner == global_pool.key())]
     pub admin_vault_account: Account<'info, TokenAccount>,
     pub token_program: Program<'info, Token>,
 }
@@ -366,7 +415,8 @@ pub struct AdminWithdrawVault<'info> {
     pub global_pool: Account<'info, GlobalPool>,
     #[account(mut)]
     pub admin: Signer<'info>,
-    #[account(mut)]
+    // Strict constraints: Mint matches Admin destination, authority is the Pool PDA
+    #[account(mut, constraint = admin_vault_account.mint == admin_dest_account.mint && admin_vault_account.owner == global_pool.key())]
     pub admin_vault_account: Account<'info, TokenAccount>,
     #[account(mut)]
     pub admin_dest_account: Account<'info, TokenAccount>,
@@ -377,7 +427,8 @@ pub struct AdminWithdrawVault<'info> {
 pub struct ResolveDefault<'info> {
     #[account(mut, seeds = [b"pool"], bump = global_pool.bump)]
     pub global_pool: Account<'info, GlobalPool>,
-    #[account(mut)]
+    // Closes the loan receipt to refund rent to the admin upon resolution
+    #[account(mut, close = admin)]
     pub loan_receipt: Account<'info, LoanReceipt>,
     #[account(mut, constraint = global_pool.admin == admin.key())]
     pub admin: Signer<'info>,
@@ -407,4 +458,6 @@ pub enum ErrorCode {
     MathOverflow,
     #[msg("This action would drop the pool below rent exemption minimums.")]
     RentExemptionRisk,
+    #[msg("Lender has requested to withdraw more shares than they own.")]
+    InsufficientShares,
 }

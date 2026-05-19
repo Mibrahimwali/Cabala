@@ -9,11 +9,13 @@ import { useLending } from "../hooks/useLending";
 
 export default function Dashboard() {
   const { publicKey, connected } = useWallet();
-  const { borrow, depositLiquidity, repay, loading: txLoading } = useLending();
+  const { borrow, depositLiquidity, withdrawLiquidity, repay, loading: txLoading } = useLending();
   
   const [isScanning, setIsScanning] = useState(false);
   const [hasNft, setHasNft] = useState<boolean | null>(null);
-  const [depositAmount, setDepositAmount] = useState<string>("");
+  
+  const [lendTab, setLendTab] = useState<"deposit" | "withdraw">("deposit");
+  const [amount, setAmount] = useState<string>("");
   const [txSignature, setTxSignature] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -37,13 +39,21 @@ export default function Dashboard() {
     }
   }, [connected, publicKey]);
 
-  const handleDeposit = async () => {
-    if (!depositAmount || isNaN(parseFloat(depositAmount))) return;
+  const handleLendAction = async () => {
+    if (!amount || isNaN(parseFloat(amount))) return;
     setErrorMsg(null);
     setTxSignature(null);
     try {
-      const tx = await depositLiquidity(parseFloat(depositAmount));
-      if (tx) setTxSignature(tx);
+      let tx;
+      if (lendTab === "deposit") {
+        tx = await depositLiquidity(parseFloat(amount));
+      } else {
+        tx = await withdrawLiquidity(parseFloat(amount));
+      }
+      if (tx) {
+        setTxSignature(tx);
+        setAmount("");
+      }
     } catch (err: any) {
       console.error(err);
       setErrorMsg(err.message || "Transaction failed.");
@@ -194,12 +204,34 @@ export default function Dashboard() {
           <div className="absolute top-0 right-0 w-64 h-64 bg-amber-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 transition-transform group-hover:scale-110" />
           
           <div className="flex flex-col gap-2 relative z-10">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 w-fit mb-2">
-              <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-              <span className="text-xs font-bold text-amber-400 tracking-wider uppercase">Public Pool</span>
+            <div className="flex justify-between items-center w-full mb-2">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 w-fit">
+                <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                <span className="text-xs font-bold text-amber-400 tracking-wider uppercase">Public Pool</span>
+              </div>
+              
+              {/* Deposit/Withdraw Tab Switcher */}
+              <div className="flex rounded-lg bg-zinc-950 border border-zinc-800 p-0.5 text-xs">
+                <button 
+                  onClick={() => { setLendTab("deposit"); setAmount(""); }}
+                  className={`px-3 py-1 rounded-md font-semibold transition-all ${lendTab === "deposit" ? "bg-amber-500 text-zinc-950" : "text-zinc-400 hover:text-zinc-200"}`}
+                >
+                  Deposit
+                </button>
+                <button 
+                  onClick={() => { setLendTab("withdraw"); setAmount(""); }}
+                  className={`px-3 py-1 rounded-md font-semibold transition-all ${lendTab === "withdraw" ? "bg-amber-500 text-zinc-950" : "text-zinc-400 hover:text-zinc-200"}`}
+                >
+                  Withdraw
+                </button>
+              </div>
             </div>
             <h2 className="text-3xl font-bold">Lend</h2>
-            <p className="text-sm text-zinc-400">Deposit SOL to earn compounding APY generated from borrower interest and 0.8 SOL repo-default spreads.</p>
+            <p className="text-sm text-zinc-400">
+              {lendTab === "deposit" 
+                ? "Deposit SOL to earn compounding APY generated from borrower interest and 0.8 SOL repo-default spreads."
+                : "Burn your jPoolShares to instantly reclaim your deposited SOL plus accrued protocol interest and repo gains."}
+            </p>
           </div>
 
           <div className="flex items-center justify-between p-4 rounded-xl bg-zinc-950/80 border border-zinc-800/50 relative z-10 mt-auto">
@@ -216,17 +248,19 @@ export default function Dashboard() {
           <div className="flex gap-3 relative z-10">
             <input 
               type="number" 
-              value={depositAmount}
-              onChange={(e) => setDepositAmount(e.target.value)}
-              placeholder="Amount in SOL" 
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder={lendTab === "deposit" ? "Amount in SOL" : "Amount in Shares"} 
               className="flex-1 bg-zinc-950/50 border border-zinc-800 rounded-xl px-4 text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/50 transition-all"
             />
             <button 
-              onClick={handleDeposit}
+              onClick={handleLendAction}
               disabled={txLoading}
-              className="w-32 h-14 rounded-xl bg-amber-500 text-zinc-950 font-bold hover:bg-amber-400 transition-all active:scale-[0.98] disabled:opacity-50"
+              className="w-36 h-14 rounded-xl bg-amber-500 text-zinc-950 font-bold hover:bg-amber-400 transition-all active:scale-[0.98] disabled:opacity-50"
             >
-              {txLoading ? "Depositing..." : "Deposit"}
+              {txLoading 
+                ? (lendTab === "deposit" ? "Depositing..." : "Withdrawing...") 
+                : (lendTab === "deposit" ? "Deposit" : "Withdraw")}
             </button>
           </div>
           
