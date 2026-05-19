@@ -14,6 +14,13 @@ The smart contract has been successfully deployed and registered on the Solana D
 - **Verified Commit**: `97f5d1f3f2abef24a16acd5d854abc0eb085d77a`
 - **Verification Registry PDA Upload Signature**: `2bxTKUGrLN68EPW1nMCZQZKZfgSBnnhCSsxNvbKw4Np4S8x5X9ttgoRXPjS3hpJW9WkJdMM6kiYaQRA5XXBWv8UR`
 
+### Functional Devnet Verification Operations
+We executed live functional calls directly against the deployed Program ID on Solana Devnet to confirm exact operational state mapping:
+- **Global Pool Derived PDA**: `EMr6GMd5L1AGGkPXhBWCkRttJWC7dbQtUbjpZ75dQd3M`
+- **Initialize Pool TX Signature**: `3jHaE2gpbDcLQfNpKQebf3drUaLNbTQG6Pyg5qyzGVFTfPRgGnaWAuKDqMBaMZJBoeoDGFCVpmTegghWgCHhXaNw`
+- **Deposit Liquidity (0.05 SOL) TX Signature**: `2aadg8uY1hmXcNNeQUQKNYH1bNAgWC1onN9yuBRMRpYrQKPR9shrwnDgGTj6KABgxXP8or5js7MzWJc9fFnpxTmy`
+- **Withdraw Liquidity (0.05 SOL shares) TX Signature**: `3RxVLAF43jUVcQRJ5hpgGCHCJM8p2F1EBGps2iak48x3y3pgTB7Pb8ar1kBLSZBbpVFgMEtegZ8KSLy7qvE1rfag`
+
 ---
 
 ## 🧪 2. Automated Integration Test Suite
