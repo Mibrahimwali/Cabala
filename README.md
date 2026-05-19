@@ -19,6 +19,7 @@ Written in Rust (`programs/jito_cabal_lending/src/lib.rs`).
 **Core Instructions:**
 *   `initialize_pool`: Creates the central liquidity PDA.
 *   `deposit_liquidity`: Allows users to supply SOL to the pool in exchange for internal shares.
+*   `withdraw_liquidity`: Allows LPs to burn their jPoolShares to instantly reclaim their deposited SOL plus accrued protocol interest and repo gains.
 *   `borrow`: Escrows the Jito Cabal NFT and transfers 1.2 SOL to the borrower. Enforces strict Metaplex Certified Collection (MCC) verification to prevent counterfeit NFT exploits.
 *   `repay`: Calculates time-based interest, processes the total repayment, and returns the NFT.
 *   `seize_collateral`: Permissionless instruction that transfers a defaulted NFT to the admin vault.
