@@ -5,8 +5,8 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 
 const LOANS = [
-  { nft: "Cabal #1204", rarity: "Archon", collateral: "2.00 SOL", borrowed: "1.20 SOL", ltv: 60, health: 85, status: "healthy", due: "12d 4h", repayAmt: "1.2461 SOL" },
-  { nft: "Cabal #0087", rarity: "Warlock", collateral: "2.00 SOL", borrowed: "1.20 SOL", ltv: 60, health: 52, status: "warning", due: "3d 7h", repayAmt: "1.2461 SOL" },
+  { nft: "Cabal #1204", rarity: "Archon", collateral: "2.00 SOL", borrowed: "1.20 SOL", ltv: 60, health: 85, status: "healthy", due: "12d 4h", repayAmt: "1.2461 SOL", image: "/nft-cabal-1204.png" },
+  { nft: "Cabal #0087", rarity: "Warlock", collateral: "2.00 SOL", borrowed: "1.20 SOL", ltv: 60, health: 52, status: "warning", due: "3d 7h", repayAmt: "1.2461 SOL", image: "/nft-cabal-0087.png" },
 ];
 
 const LP_POSITIONS = [
@@ -81,7 +81,7 @@ export default function PortfolioPage() {
                           <div className="flex items-center gap-3">
                             <div className="w-9 h-9 rounded-lg overflow-hidden relative"
                               style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
-                              <Image src="/nft-placeholder.png" alt={loan.nft} fill className="object-cover opacity-80" />
+                              <Image src={loan.image} alt={loan.nft} fill className="object-cover opacity-80" />
                             </div>
                             <div>
                               <div className="font-semibold text-white text-sm">{loan.nft}</div>
@@ -117,7 +117,7 @@ export default function PortfolioPage() {
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-lg overflow-hidden relative"
                           style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
-                          <Image src="/nft-placeholder.png" alt={loan.nft} fill className="object-cover opacity-80" />
+                          <Image src={loan.image} alt={loan.nft} fill className="object-cover opacity-80" />
                         </div>
                         <div>
                           <div className="font-semibold text-white text-sm">{loan.nft}</div>

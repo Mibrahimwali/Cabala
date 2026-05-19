@@ -10,10 +10,10 @@ const CABAL_COLLECTION = "F7YJeY3wPhgUCvV4EKEKWx7YgNENG21178BHMujz6BzU";
 const DEMO_NFT = "7nE654bK8i4N8LzQfE4vFv4jNz51x9E8Tba3Ejg39";
 
 const MOCK_NFTS = [
-  { id: "1204", name: "Cabal #1204", floorSOL: "2.00", loanSOL: "1.20", rarity: "Archon", rank: 42, verified: true },
-  { id: "0087", name: "Cabal #0087", floorSOL: "2.00", loanSOL: "1.20", rarity: "Warlock", rank: 88, verified: true },
-  { id: "3310", name: "Cabal #3310", floorSOL: "2.00", loanSOL: "1.20", rarity: "Adept", rank: 312, verified: true },
-  { id: "0512", name: "Cabal #0512", floorSOL: "2.00", loanSOL: "1.20", rarity: "Elder", rank: 7, verified: true },
+  { id: "1204", name: "Cabal #1204", floorSOL: "2.00", loanSOL: "1.20", rarity: "Archon", rank: 42, verified: true, image: "/nft-cabal-1204.png" },
+  { id: "0087", name: "Cabal #0087", floorSOL: "2.00", loanSOL: "1.20", rarity: "Warlock", rank: 88, verified: true, image: "/nft-cabal-0087.png" },
+  { id: "3310", name: "Cabal #3310", floorSOL: "2.00", loanSOL: "1.20", rarity: "Adept", rank: 312, verified: true, image: "/nft-cabal-3310.png" },
+  { id: "0512", name: "Cabal #0512", floorSOL: "2.00", loanSOL: "1.20", rarity: "Elder", rank: 7, verified: true, image: "/nft-cabal-0512.png" },
 ];
 
 const RARITY_COLORS: Record<string, string> = {
@@ -28,7 +28,7 @@ function NFTCard({ nft, selected, onSelect }: { nft: typeof MOCK_NFTS[0]; select
       {/* Image area */}
       <div className="relative aspect-square bg-gradient-to-br from-white/[0.03] to-black">
         <div className="absolute inset-0">
-          <Image src="/nft-placeholder.png" alt={nft.name} fill className="object-cover opacity-80" />
+          <Image src={nft.image} alt={nft.name} fill className="object-cover opacity-80" />
         </div>
         {/* Verified MCC badge */}
         {nft.verified && (
@@ -167,7 +167,7 @@ export default function BorrowPage() {
                   {selectedNft ? (
                     <>
                       <div className="absolute inset-0">
-                        <Image src="/nft-placeholder.png" alt={selectedNft.name} fill className="object-cover opacity-80" />
+                        <Image src={selectedNft.image} alt={selectedNft.name} fill className="object-cover opacity-80" />
                       </div>
                       <div className="absolute top-3 right-3 verified-badge text-[9px]">
                         ✓ MCC Verified
