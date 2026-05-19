@@ -62,7 +62,7 @@ pub mod jito_cabal_lending {
 
         // 1. Strict Metaplex Certified Collection (MCC) Verification
         let metadata_info = &ctx.accounts.nft_metadata;
-        let metadata = Metadata::try_from(metadata_info).map_err(|_| ErrorCode::InvalidMetadata)?;
+        let metadata = Metadata::try_from(&metadata_info.to_account_info()).map_err(|_| ErrorCode::InvalidMetadata)?;
         
         let collection = metadata.collection.ok_or(ErrorCode::NotPartOfCollection)?;
         require!(collection.verified, ErrorCode::CollectionNotVerified);
@@ -314,16 +314,16 @@ pub struct Borrow<'info> {
     #[account(mut, seeds = [b"pool"], bump = global_pool.bump)]
     pub global_pool: Account<'info, GlobalPool>,
     #[account(init, payer = borrower, space = 8 + 32 + 32 + 8 + 8 + 1 + 32 + 1, seeds = [b"receipt", borrower.key().as_ref(), nft_mint.key().as_ref()], bump)]
-    pub loan_receipt: Account<'info, LoanReceipt>,
+    pub loan_receipt: Box<Account<'info, LoanReceipt>>,
     #[account(mut)]
     pub borrower: Signer<'info>,
     pub nft_mint: Account<'info, Mint>,
     #[account(mut, constraint = borrower_nft_account.mint == nft_mint.key() && borrower_nft_account.owner == borrower.key())]
-    pub borrower_nft_account: Account<'info, TokenAccount>,
+    pub borrower_nft_account: Box<Account<'info, TokenAccount>>,
     /// CHECK: Metaplex Metadata Account
     pub nft_metadata: UncheckedAccount<'info>,
     #[account(init, payer = borrower, token::mint = nft_mint, token::authority = global_pool, seeds = [b"escrow", nft_mint.key().as_ref()], bump)]
-    pub escrow_nft_account: Account<'info, TokenAccount>,
+    pub escrow_nft_account: Box<Account<'info, TokenAccount>>,
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
     pub rent: Sysvar<'info, Rent>,
