@@ -3,7 +3,7 @@
   "metadata": {
     "name": "jito_cabal_lending",
     "version": "0.1.0",
-    "specVersion": "0.1.0",
+    "spec": "0.1.0",
     "description": "Jito Cabal NFT Lending Protocol"
   },
   "instructions": [
@@ -12,8 +12,11 @@
       "discriminator": [95, 180, 10, 172, 84, 174, 232, 40],
       "accounts": [
         { "name": "globalPool", "writable": true, "signer": false },
+        { "name": "lpMint", "writable": true, "signer": false },
         { "name": "admin", "writable": true, "signer": true },
-        { "name": "systemProgram", "writable": false, "signer": false }
+        { "name": "tokenProgram", "writable": false, "signer": false },
+        { "name": "systemProgram", "writable": false, "signer": false },
+        { "name": "rent", "writable": false, "signer": false }
       ],
       "args": []
     },
@@ -22,7 +25,11 @@
       "discriminator": [245, 99, 59, 25, 151, 71, 233, 249],
       "accounts": [
         { "name": "globalPool", "writable": true, "signer": false },
+        { "name": "lpMint", "writable": true, "signer": false },
+        { "name": "lenderLpAta", "writable": true, "signer": false },
         { "name": "lender", "writable": true, "signer": true },
+        { "name": "tokenProgram", "writable": false, "signer": false },
+        { "name": "associatedTokenProgram", "writable": false, "signer": false },
         { "name": "systemProgram", "writable": false, "signer": false }
       ],
       "args": [{ "name": "amount", "type": "u64" }]
@@ -32,7 +39,11 @@
       "discriminator": [149, 158, 33, 185, 47, 243, 253, 31],
       "accounts": [
         { "name": "globalPool", "writable": true, "signer": false },
+        { "name": "lpMint", "writable": true, "signer": false },
+        { "name": "lenderLpAta", "writable": true, "signer": false },
         { "name": "lender", "writable": true, "signer": true },
+        { "name": "tokenProgram", "writable": false, "signer": false },
+        { "name": "associatedTokenProgram", "writable": false, "signer": false },
         { "name": "systemProgram", "writable": false, "signer": false }
       ],
       "args": [{ "name": "shares", "type": "u64" }]
@@ -111,7 +122,7 @@
         "fields": [
           { "name": "admin", "type": "pubkey" },
           { "name": "totalSol", "type": "u64" },
-          { "name": "totalShares", "type": "u64" },
+          { "name": "lpMint", "type": "pubkey" },
           { "name": "bump", "type": "u8" }
         ]
       }

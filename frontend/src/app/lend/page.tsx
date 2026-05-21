@@ -3,10 +3,13 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useLending } from "@/hooks/useLending";
 
-const BASE_APY = 14.2;
+const BASE_APY_LABEL = "Variable";
 
 function calcEarnings(sol: number, days: number) {
-  return ((sol * (BASE_APY / 100) * days) / 365).toFixed(4);
+  // Approximation based on 10% max interest per 7-day loan at full utilization
+  const annualizedRate = 0.10 * (365 / 7); // ~521% theoretical max, but utilization-adjusted
+  const effectiveRate = annualizedRate * 0.15; // ~78% at estimated 15% avg utilization
+  return ((sol * effectiveRate * days) / 365).toFixed(4);
 }
 
 export default function LendPage() {
@@ -34,7 +37,7 @@ export default function LendPage() {
         <div className="mb-8">
           <p className="badge badge-gold mb-3 w-fit">Public Pool · Open to All</p>
           <h1 className="display-text text-3xl md:text-4xl text-white mb-2">Lend Liquidity</h1>
-          <p className="text-white/40">Deposit SOL. Earn 14.2% base APY. Secured by Jito Cabal NFT collateral.</p>
+          <p className="text-white/40">Deposit SOL. Earn yield from NFT-collateralized loan interest. Rate depends on pool utilization.</p>
         </div>
 
         {/* Notifications */}
@@ -94,7 +97,7 @@ export default function LendPage() {
               {[
                 { label: tab === "deposit" ? "You Deposit" : "You Burn", value: sol > 0 ? `${sol} SOL` : "—" },
                 { label: tab === "deposit" ? "jPoolShares Received" : "SOL Received", value: sol > 0 ? `${(sol * 0.9992).toFixed(4)}` : "—" },
-                { label: "Current APY", value: "14.2%", accent: "#00FF9F" },
+                { label: "Current APY", value: "Variable", accent: "#00FF9F" },
                 { label: "Pool Share", value: sol > 0 ? `${((sol / 1368.18) * 100).toFixed(3)}%` : "—" },
               ].map(item => (
                 <div key={item.label} className="flex justify-between items-center text-sm">
@@ -142,7 +145,7 @@ export default function LendPage() {
               <p className="text-2xl font-mono font-bold" style={{ color: "#D4AF77" }}>
                 {sol > 0 ? `${calcEarnings(sol, 30)} SOL` : "—"}
               </p>
-              <p className="text-xs text-white/30">on {sol || "0"} SOL for 30 days @ {BASE_APY}% APY</p>
+              <p className="text-xs text-white/30">on {sol || "0"} SOL for 30 days (estimated)</p>
               <hr className="neon-divider" />
               <div className="flex flex-col gap-3">
                 {[

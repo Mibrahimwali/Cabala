@@ -194,9 +194,9 @@ export default function BorrowPage() {
                   { label: "Collateral Value", value: selectedNft ? "2.00 SOL" : "—" },
                   { label: "Loan Amount", value: selectedNft ? "1.20 SOL" : "—", accent: "#00FF9F" },
                   { label: "LTV Ratio", value: "60%", accent: "#D4AF77" },
-                  { label: "Interest Rate", value: "12% APR" },
-                  { label: "Loan Duration", value: "14 days" },
-                  { label: "Repay Amount", value: selectedNft ? "1.2461 SOL" : "—" },
+                  { label: "Interest Rate", value: "10% max (7-day term)" },
+                  { label: "Loan Duration", value: "7 days" },
+                  { label: "Max Repay Amount", value: selectedNft ? "1.32 SOL" : "—" },
                 ].map(item => (
                   <div key={item.label} className="flex justify-between text-sm">
                     <span className="text-white/40">{item.label}</span>
@@ -223,7 +223,7 @@ export default function BorrowPage() {
               {/* Warning */}
               <div className="rounded-xl p-4 text-xs text-white/40 leading-relaxed"
                 style={{ background: "rgba(200,16,46,0.04)", border: "1px solid rgba(200,16,46,0.1)" }}>
-                ⚠ If you do not repay within 14 days, your NFT will be liquidated to cover the loan. Health factor below 100% triggers auto-liquidation.
+                ⚠ If you do not repay within 7 days, your NFT will be seized and transferred to the protocol admin for liquidation. Interest accrues linearly up to 10% max.
               </div>
             </div>
           </div>

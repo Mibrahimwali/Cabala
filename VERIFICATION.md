@@ -68,3 +68,10 @@ This avoids transaction footprint, reduces compile-time warnings, and guarantees
 Because Metaplex Core is a self-contained, single-account token standard, the protocol does not require Associated Token Accounts (ATAs) or separate escrow accounts.
 - **Direct PDA Holding**: During active loans, the NFT asset's owner property is atomically changed directly to the pool's PDA. No escrow accounts are created, avoiding state-bloat and complex account closure routines.
 - **Cleanups**: Upon repayment, the receipt account is closed and rent lamports are returned to the borrower. Upon seizure, the receipts are resolved, paying the keeper and returning remaining rent lamports to the admin.
+
+### D. Deep-Hardened Validations & PDA Integrity
+To secure the protocol against advanced exploit vectors, edge-case validator frontrunning, and administrative errors:
+1. **PDA Seed Validation in `ResolveDefault`**: Enforced strict, declarative on-chain validation for the closed `loan_receipt` using deterministic seeds `[b"receipt", borrower, nft_mint]` to ensure unauthorized accounts cannot be closed.
+2. **Collection Verification in `Repay`**: Added strict constraint validation requiring the passed `nft_collection` to exactly match `CABAL_COLLECTION`, completely blocking rogue NFT collection repayments.
+3. **Declarative Constraint Mapping**: Migrated NFT collection checks into standard Anchor `constraint = ...` attributes across `Borrow`, `Repay`, and `SeizeCollateral` structures to ensure structural compile-time safety and optimal gas runtime efficiency.
+
