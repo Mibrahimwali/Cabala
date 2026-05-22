@@ -4,12 +4,15 @@ use std::str::FromStr;
 use mpl_core::accounts::BaseAssetV1;
 use mpl_core::types::UpdateAuthority;
 use mpl_core::instructions::TransferV1CpiBuilder;
+use anchor_spl::token::{self, Mint, Token, TokenAccount};
+use anchor_spl::associated_token::AssociatedToken;
 
 declare_id!("EazAH8Adyino7uConjZfYdjFqmjqfm7vBtTsba3Ejg39");
 
 pub const LTV_AMOUNT: u64 = 1_200_000_000; // 1.2 SOL
 pub const LOAN_DURATION: i64 = 7 * 24 * 60 * 60; // 7 days in seconds
 pub const KEEPER_BOUNTY: u64 = 20_000_000; // 0.02 SOL
+pub const REPO_VALUE: u64 = 2_000_000_000; // 2 SOL – admin buyback on default resolution
 
 // Real Jito Cabal Verified Collection Mint
 pub const CABAL_COLLECTION: &str = "F7YJeY3wPhgUCvV4EKEKWx7YgNENG21178BHMujz6BzU";
@@ -22,13 +25,14 @@ pub mod jito_cabal_lending {
         let pool = &mut ctx.accounts.global_pool;
         pool.admin = ctx.accounts.admin.key();
         pool.total_sol = 0;
-        pool.total_shares = 0;
+        pool.lp_mint = ctx.accounts.lp_mint.key();
         pool.bump = ctx.bumps.global_pool;
-        msg!("Jito Cabal Lending Pool Initialized. Admin: {}", pool.admin);
+        msg!("Jito Cabal Lending Pool Initialized. Admin: {}, LP Mint: {}", pool.admin, pool.lp_mint);
         Ok(())
     }
 
     pub fn deposit_liquidity(ctx: Context<DepositLiquidity>, amount: u64) -> Result<()> {
+        require!(amount > 0, ErrorCode::ZeroAmount);
         let pool = &mut ctx.accounts.global_pool;
         
         let cpi_context = CpiContext::new(
@@ -40,31 +44,51 @@ pub mod jito_cabal_lending {
         );
         transfer(cpi_context, amount)?;
 
-        let shares = if pool.total_sol == 0 {
+        let total_sol = pool.total_sol;
+        let total_shares = ctx.accounts.lp_mint.supply;
+
+        let shares = if total_sol == 0 || total_shares == 0 {
             amount
         } else {
             (amount as u128)
-                .checked_mul(pool.total_shares as u128)
+                .checked_mul(total_shares as u128)
                 .ok_or(ErrorCode::MathOverflow)?
-                .checked_div(pool.total_sol as u128)
+                .checked_div(total_sol as u128)
                 .ok_or(ErrorCode::MathOverflow)? as u64
         };
 
         pool.total_sol = pool.total_sol.checked_add(amount).ok_or(ErrorCode::MathOverflow)?;
-        pool.total_shares = pool.total_shares.checked_add(shares).ok_or(ErrorCode::MathOverflow)?;
 
-        msg!("Deposited {} SOL. Issued {} Shares.", amount, shares);
+        // Mint LP shares to lender using pool seeds as authority
+        let pool_bump = pool.bump;
+        let seeds = &[b"pool".as_ref(), &[pool_bump]];
+        let signer = &[&seeds[..]];
+
+        let cpi_mint = CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            token::MintTo {
+                mint: ctx.accounts.lp_mint.to_account_info(),
+                to: ctx.accounts.lender_lp_ata.to_account_info(),
+                authority: pool.to_account_info(),
+            },
+            signer,
+        );
+        token::mint_to(cpi_mint, shares)?;
+
+        msg!("Deposited {} SOL. Issued {} LP Shares.", amount, shares);
         Ok(())
     }
 
     pub fn withdraw_liquidity(ctx: Context<WithdrawLiquidity>, shares: u64) -> Result<()> {
+        require!(shares > 0, ErrorCode::ZeroShares);
         let pool = &mut ctx.accounts.global_pool;
-        require!(pool.total_shares >= shares, ErrorCode::InsufficientShares);
+        let total_shares = ctx.accounts.lp_mint.supply;
+        require!(total_shares >= shares, ErrorCode::InsufficientShares);
         
         let amount = (shares as u128)
             .checked_mul(pool.total_sol as u128)
             .ok_or(ErrorCode::MathOverflow)?
-            .checked_div(pool.total_shares as u128)
+            .checked_div(total_shares as u128)
             .ok_or(ErrorCode::MathOverflow)? as u64;
 
         let rent_minimum = Rent::get()?.minimum_balance(pool.to_account_info().data_len());
@@ -72,7 +96,17 @@ pub mod jito_cabal_lending {
         require!(current_lamports.checked_sub(amount).ok_or(ErrorCode::MathOverflow)? >= rent_minimum, ErrorCode::RentExemptionRisk);
 
         pool.total_sol = pool.total_sol.checked_sub(amount).ok_or(ErrorCode::MathOverflow)?;
-        pool.total_shares = pool.total_shares.checked_sub(shares).ok_or(ErrorCode::MathOverflow)?;
+
+        // Burn LP tokens from lender's Associated Token Account
+        let cpi_burn = CpiContext::new(
+            ctx.accounts.token_program.to_account_info(),
+            token::Burn {
+                mint: ctx.accounts.lp_mint.to_account_info(),
+                from: ctx.accounts.lender_lp_ata.to_account_info(),
+                authority: ctx.accounts.lender.to_account_info(),
+            },
+        );
+        token::burn(cpi_burn, shares)?;
 
         // Transfer SOL from Pool PDA to Lender
         **pool.to_account_info().try_borrow_mut_lamports()? -= amount;
@@ -102,7 +136,6 @@ pub mod jito_cabal_lending {
         
         let expected_collection_pubkey = Pubkey::from_str(CABAL_COLLECTION).unwrap();
         require_keys_eq!(collection_key, expected_collection_pubkey, ErrorCode::InvalidCollection);
-        require_keys_eq!(ctx.accounts.nft_collection.key(), expected_collection_pubkey, ErrorCode::InvalidCollection);
 
         // 2. Rent-Exemption Safety Check & Pool SOL deductions in scoped block to avoid E0502
         {
@@ -231,7 +264,7 @@ pub mod jito_cabal_lending {
 
         require!(receipt.status == LoanStatus::PendingRepo, ErrorCode::InvalidLoanState);
 
-        let repo_value = 2_000_000_000; // 2 SOL
+        let repo_value = REPO_VALUE;
         
         let cpi_context = CpiContext::new(
             ctx.accounts.system_program.to_account_info(),
@@ -261,7 +294,7 @@ pub mod jito_cabal_lending {
 pub struct GlobalPool {
     pub admin: Pubkey,
     pub total_sol: u64,
-    pub total_shares: u64,
+    pub lp_mint: Pubkey,
     pub bump: u8,
 }
 
@@ -290,19 +323,46 @@ pub enum LoanStatus {
 
 #[derive(Accounts)]
 pub struct InitializePool<'info> {
-    #[account(init, payer = admin, space = 8 + 32 + 8 + 8 + 1, seeds = [b"pool"], bump)]
+    #[account(init, payer = admin, space = 8 + 32 + 8 + 32 + 1, seeds = [b"pool"], bump)]
     pub global_pool: Account<'info, GlobalPool>,
+
+    #[account(
+        init,
+        payer = admin,
+        mint::decimals = 9,
+        mint::authority = global_pool,
+        seeds = [b"mint"],
+        bump
+    )]
+    pub lp_mint: Account<'info, Mint>,
+
     #[account(mut)]
     pub admin: Signer<'info>,
+    pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
+    pub rent: Sysvar<'info, Rent>,
 }
 
 #[derive(Accounts)]
 pub struct DepositLiquidity<'info> {
     #[account(mut, seeds = [b"pool"], bump = global_pool.bump)]
     pub global_pool: Account<'info, GlobalPool>,
+
+    #[account(mut, seeds = [b"mint"], bump)]
+    pub lp_mint: Account<'info, Mint>,
+
+    #[account(
+        init_if_needed,
+        payer = lender,
+        associated_token::mint = lp_mint,
+        associated_token::authority = lender,
+    )]
+    pub lender_lp_ata: Account<'info, TokenAccount>,
+
     #[account(mut)]
     pub lender: Signer<'info>,
+    pub token_program: Program<'info, Token>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
 }
 
@@ -310,8 +370,21 @@ pub struct DepositLiquidity<'info> {
 pub struct WithdrawLiquidity<'info> {
     #[account(mut, seeds = [b"pool"], bump = global_pool.bump)]
     pub global_pool: Account<'info, GlobalPool>,
+
+    #[account(mut, seeds = [b"mint"], bump)]
+    pub lp_mint: Account<'info, Mint>,
+
+    #[account(
+        mut,
+        associated_token::mint = lp_mint,
+        associated_token::authority = lender,
+    )]
+    pub lender_lp_ata: Account<'info, TokenAccount>,
+
     #[account(mut)]
     pub lender: Signer<'info>,
+    pub token_program: Program<'info, Token>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
 }
 
@@ -327,6 +400,7 @@ pub struct Borrow<'info> {
     #[account(mut)]
     pub nft_asset: AccountInfo<'info>,
     /// CHECK: Metaplex Core Collection Account
+    #[account(constraint = nft_collection.key() == Pubkey::from_str(CABAL_COLLECTION).unwrap() @ ErrorCode::InvalidCollection)]
     pub nft_collection: AccountInfo<'info>,
     /// CHECK: Metaplex Core Program
     pub mpl_core_program: AccountInfo<'info>,
@@ -337,7 +411,13 @@ pub struct Borrow<'info> {
 pub struct Repay<'info> {
     #[account(mut, seeds = [b"pool"], bump = global_pool.bump)]
     pub global_pool: Account<'info, GlobalPool>,
-    #[account(mut, close = borrower, constraint = loan_receipt.borrower == borrower.key() && loan_receipt.nft_mint == nft_asset.key())]
+    #[account(
+        mut, 
+        close = borrower, 
+        seeds = [b"receipt", borrower.key().as_ref(), nft_asset.key().as_ref()], 
+        bump = loan_receipt.bump,
+        constraint = loan_receipt.borrower == borrower.key() && loan_receipt.nft_mint == nft_asset.key()
+    )]
     pub loan_receipt: Box<Account<'info, LoanReceipt>>,
     #[account(mut)]
     pub borrower: Signer<'info>,
@@ -345,6 +425,7 @@ pub struct Repay<'info> {
     #[account(mut)]
     pub nft_asset: AccountInfo<'info>,
     /// CHECK: Metaplex Core Collection Account
+    #[account(constraint = nft_collection.key() == Pubkey::from_str(CABAL_COLLECTION).unwrap() @ ErrorCode::InvalidCollection)]
     pub nft_collection: AccountInfo<'info>,
     /// CHECK: Metaplex Core Program
     pub mpl_core_program: AccountInfo<'info>,
@@ -355,7 +436,12 @@ pub struct Repay<'info> {
 pub struct SeizeCollateral<'info> {
     #[account(mut, seeds = [b"pool"], bump = global_pool.bump)]
     pub global_pool: Account<'info, GlobalPool>,
-    #[account(mut, constraint = loan_receipt.nft_mint == nft_asset.key())]
+    #[account(
+        mut, 
+        seeds = [b"receipt", loan_receipt.borrower.key().as_ref(), nft_asset.key().as_ref()], 
+        bump = loan_receipt.bump,
+        constraint = loan_receipt.nft_mint == nft_asset.key()
+    )]
     pub loan_receipt: Account<'info, LoanReceipt>,
     #[account(mut)]
     pub keeper: Signer<'info>,
@@ -363,6 +449,7 @@ pub struct SeizeCollateral<'info> {
     #[account(mut)]
     pub nft_asset: AccountInfo<'info>,
     /// CHECK: Metaplex Core Collection Account
+    #[account(constraint = nft_collection.key() == Pubkey::from_str(CABAL_COLLECTION).unwrap() @ ErrorCode::InvalidCollection)]
     pub nft_collection: AccountInfo<'info>,
     /// CHECK: Metaplex Core Program
     pub mpl_core_program: AccountInfo<'info>,
@@ -376,7 +463,12 @@ pub struct SeizeCollateral<'info> {
 pub struct ResolveDefault<'info> {
     #[account(mut, seeds = [b"pool"], bump = global_pool.bump)]
     pub global_pool: Account<'info, GlobalPool>,
-    #[account(mut, close = admin)]
+    #[account(
+        mut, 
+        close = admin,
+        seeds = [b"receipt", loan_receipt.borrower.key().as_ref(), loan_receipt.nft_mint.key().as_ref()],
+        bump = loan_receipt.bump
+    )]
     pub loan_receipt: Account<'info, LoanReceipt>,
     #[account(mut, constraint = global_pool.admin == admin.key())]
     pub admin: Signer<'info>,
@@ -410,4 +502,8 @@ pub enum ErrorCode {
     InsufficientShares,
     #[msg("Borrower is not the owner of the NFT.")]
     InvalidOwner,
+    #[msg("Deposit amount must be greater than zero.")]
+    ZeroAmount,
+    #[msg("Shares to withdraw must be greater than zero.")]
+    ZeroShares,
 }

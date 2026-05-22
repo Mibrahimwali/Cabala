@@ -35,12 +35,30 @@ export function useLending() {
           [Buffer.from("pool")],
           program.programId
         );
+        const [lpMint] = PublicKey.findProgramAddressSync(
+          [Buffer.from("mint")],
+          program.programId
+        );
+        const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+        const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
+        const [lenderLpAta] = PublicKey.findProgramAddressSync(
+          [
+            wallet.publicKey.toBuffer(),
+            TOKEN_PROGRAM_ID.toBuffer(),
+            lpMint.toBuffer(),
+          ],
+          ASSOCIATED_TOKEN_PROGRAM_ID
+        );
 
         const tx = await program.methods
           .depositLiquidity(amountLamports)
           .accountsStrict({
             globalPool,
+            lpMint,
+            lenderLpAta,
             lender: wallet.publicKey,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
           })
           .rpc();
@@ -149,12 +167,30 @@ export function useLending() {
           [Buffer.from("pool")],
           program.programId
         );
+        const [lpMint] = PublicKey.findProgramAddressSync(
+          [Buffer.from("mint")],
+          program.programId
+        );
+        const TOKEN_PROGRAM_ID = new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA");
+        const ASSOCIATED_TOKEN_PROGRAM_ID = new PublicKey("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL");
+        const [lenderLpAta] = PublicKey.findProgramAddressSync(
+          [
+            wallet.publicKey.toBuffer(),
+            TOKEN_PROGRAM_ID.toBuffer(),
+            lpMint.toBuffer(),
+          ],
+          ASSOCIATED_TOKEN_PROGRAM_ID
+        );
 
         const tx = await program.methods
           .withdrawLiquidity(shares)
           .accountsStrict({
             globalPool,
+            lpMint,
+            lenderLpAta,
             lender: wallet.publicKey,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
             systemProgram: SystemProgram.programId,
           })
           .rpc();
